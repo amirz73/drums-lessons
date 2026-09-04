@@ -1,1 +1,256 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>שיעורי תופים</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto; background: #f5f5f5; padding: 16px 16px 32px; }
+        .container { max-width: 500px; margin: 0 auto; }
+        .header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+        .header h1 { font-size: 24px; font-weight: 600; }
+        .stats-box { background: #E6F1FB; border-radius: 12px; padding: 16px; margin-bottom: 20px; text-align: center; }
+        .stats-label { font-size: 13px; color: #666; margin-bottom: 8px; }
+        .stats-number { font-size: 32px; font-weight: 700; color: #185FA5; }
+        .lesson-card { background: white; border: 1px solid #ddd; border-radius: 12px; padding: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; }
+        .lesson-info h3 { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+        .lesson-info p { font-size: 12px; color: #999; }
+        .lesson-status { font-size: 11px; font-weight: 600; padding: 4px 8px; border-radius: 6px; margin-bottom: 8px; }
+        .status-pending { background: #f0f0f0; color: #999; }
+        .status-ok { background: #d4edda; color: #155724; }
+        .status-missed { background: #f8d7da; color: #721c24; }
+        .lesson-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+        button { padding: 6px 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 12px; }
+        .btn-yes { background: #28a745; color: white; }
+        .btn-no { background: #dc3545; color: white; }
+        .btn-reset { background: #6c757d; color: white; padding: 6px 10px; }
+        .btn-complete { background: #185FA5; color: white; }
+        .info-box { background: white; border-radius: 12px; padding: 14px; margin-top: 20px; border: 1px solid #ddd; }
+        .info-box p { font-size: 13px; color: #666; margin: 6px 0; }
+        .button-group { display: flex; gap: 8px; margin-top: 20px; }
+        .btn-action { flex: 1; padding: 12px; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 14px; color: white; }
+        .btn-export { background: #185FA5; }
+        .btn-import { background: #28a745; }
+        #import-file { display: none; }
+        .button-row { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div style="font-size: 32px;">🥁</div>
+            <h1>שיעורי תופים</h1>
+        </div>
 
+        <div class="stats-box">
+            <div class="stats-label">שיעורים להשלמה</div>
+            <div class="stats-number" id="incomplete-count">0</div>
+        </div>
+
+        <div id="lessons-container"></div>
+
+        <div class="info-box">
+            <p><strong>עם המורה:</strong> עמית כהן</p>
+            <p><strong>ימים:</strong> יום שישי בכל שבוע</p>
+            <p><strong>תקופה:</strong> 4 בספטמבר 2026 – 31 ביולי 2027</p>
+        </div>
+
+        <div class="button-group">
+            <button class="btn-action btn-export" id="export-btn">📥 גבה</button>
+            <button class="btn-action btn-import" id="import-btn">📤 שחזור</button>
+        </div>
+
+        <input type="file" id="import-file" accept=".json">
+    </div>
+
+    <script>
+        const STORAGE_KEY = 'drums_v1';
+        let allLessons = [];
+
+        function generateLessons() {
+            const lessons = [];
+            let date = new Date(2026, 8, 4);
+            const endDate = new Date(2027, 6, 31);
+            let week = 1;
+
+            while (date <= endDate) {
+                lessons.push({
+                    id: week,
+                    week: week,
+                    date: date.toISOString().split('T')[0],
+                    status: 'pending'
+                });
+                date.setDate(date.getDate() + 7);
+                week++;
+            }
+            return lessons;
+        }
+
+        function save() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(allLessons));
+                console.log('✓ נשמר ב-localStorage');
+            } catch (e) {
+                console.error('שגיאה בשמירה:', e);
+            }
+        }
+
+        function load() {
+            try {
+                const stored = localStorage.getItem(STORAGE_KEY);
+                console.log('localStorage value:', stored ? 'יש נתונים' : 'אין נתונים');
+                if (stored) {
+                    const parsed = JSON.parse(stored);
+                    console.log('נטענו', parsed.length, 'שיעורים מ-localStorage');
+                    return parsed;
+                }
+            } catch (e) {
+                console.error('שגיאה בטעינה:', e);
+            }
+            console.log('יוצר שיעורים חדשים');
+            return generateLessons();
+        }
+
+        function markComplete(id) {
+            const lesson = allLessons.find(l => l.id === id);
+            if (lesson) {
+                lesson.status = 'done';
+                save();
+                render();
+            }
+        }
+
+        function markMissed(id) {
+            const lesson = allLessons.find(l => l.id === id);
+            if (lesson) {
+                lesson.status = 'missed';
+                save();
+                render();
+            }
+        }
+
+        function reset(id) {
+            const lesson = allLessons.find(l => l.id === id);
+            if (lesson) {
+                lesson.status = 'pending';
+                save();
+                render();
+            }
+        }
+
+        function render() {
+            const container = document.getElementById('lessons-container');
+            container.innerHTML = '';
+
+            const incomplete = allLessons.filter(l => l.status === 'missed').length;
+            document.getElementById('incomplete-count').textContent = incomplete;
+
+            allLessons.forEach(lesson => {
+                const date = new Date(lesson.date);
+                const dateStr = date.toLocaleDateString('he-IL', { month: 'short', day: 'numeric' });
+
+                let statusText = 'ממתינה';
+                let statusClass = 'status-pending';
+
+                if (lesson.status === 'done') {
+                    statusText = '✓ הושלם';
+                    statusClass = 'status-ok';
+                } else if (lesson.status === 'missed') {
+                    statusText = 'לא התקיים';
+                    statusClass = 'status-missed';
+                }
+
+                const card = document.createElement('div');
+                card.className = 'lesson-card';
+
+                const info = document.createElement('div');
+                const title = document.createElement('h3');
+                title.textContent = `שבוע ${lesson.week}`;
+                const dateEl = document.createElement('p');
+                dateEl.textContent = dateStr;
+                info.appendChild(title);
+                info.appendChild(dateEl);
+
+                const actions = document.createElement('div');
+                actions.className = 'lesson-actions';
+
+                const status = document.createElement('div');
+                status.className = `lesson-status ${statusClass}`;
+                status.textContent = statusText;
+                actions.appendChild(status);
+
+                const buttons = document.createElement('div');
+                buttons.className = 'button-row';
+
+                if (lesson.status === 'pending') {
+                    const yesBtn = document.createElement('button');
+                    yesBtn.className = 'btn-yes';
+                    yesBtn.textContent = '✓ כן';
+                    yesBtn.onclick = () => markComplete(lesson.id);
+
+                    const noBtn = document.createElement('button');
+                    noBtn.className = 'btn-no';
+                    noBtn.textContent = '✗ לא';
+                    noBtn.onclick = () => markMissed(lesson.id);
+
+                    buttons.appendChild(yesBtn);
+                    buttons.appendChild(noBtn);
+                } else {
+                    const resetBtn = document.createElement('button');
+                    resetBtn.className = 'btn-reset';
+                    resetBtn.textContent = '↻ אפס';
+                    resetBtn.onclick = () => reset(lesson.id);
+                    buttons.appendChild(resetBtn);
+
+                    if (lesson.status === 'missed') {
+                        const completeBtn = document.createElement('button');
+                        completeBtn.className = 'btn-complete';
+                        completeBtn.textContent = '✓ הושלם';
+                        completeBtn.onclick = () => markComplete(lesson.id);
+                        buttons.appendChild(completeBtn);
+                    }
+                }
+
+                actions.appendChild(buttons);
+                card.appendChild(info);
+                card.appendChild(actions);
+                container.appendChild(card);
+            });
+        }
+
+        document.getElementById('export-btn').onclick = () => {
+            const blob = new Blob([JSON.stringify(allLessons, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `drums_${new Date().toISOString().split('T')[0]}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        };
+
+        document.getElementById('import-btn').onclick = () => {
+            document.getElementById('import-file').click();
+        };
+
+        document.getElementById('import-file').onchange = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+                try {
+                    allLessons = JSON.parse(evt.target.result);
+                    save();
+                    render();
+                } catch (err) {
+                    alert('שגיאה בטעינה');
+                }
+            };
+            reader.readAsText(file);
+        };
+
+        allLessons = load();
+        render();
+    </script>
+</body>
+</html>
