@@ -90,25 +90,20 @@
         function save() {
             try {
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(allLessons));
-                console.log('✓ נשמר ב-localStorage');
             } catch (e) {
-                console.error('שגיאה בשמירה:', e);
+                console.error('Error saving:', e);
             }
         }
 
         function load() {
             try {
                 const stored = localStorage.getItem(STORAGE_KEY);
-                console.log('localStorage value:', stored ? 'יש נתונים' : 'אין נתונים');
                 if (stored) {
-                    const parsed = JSON.parse(stored);
-                    console.log('נטענו', parsed.length, 'שיעורים מ-localStorage');
-                    return parsed;
+                    return JSON.parse(stored);
                 }
             } catch (e) {
-                console.error('שגיאה בטעינה:', e);
+                console.error('Error loading:', e);
             }
-            console.log('יוצר שיעורים חדשים');
             return generateLessons();
         }
 
@@ -243,7 +238,7 @@
                     save();
                     render();
                 } catch (err) {
-                    alert('שגיאה בטעינה');
+                    alert('Error loading data');
                 }
             };
             reader.readAsText(file);
