@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>שיעורי תופים</title>
+    <title>שיעורי תופים - Firebase</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto; background: #f5f5f5; padding: 16px 16px 32px; }
@@ -34,6 +34,7 @@
         .btn-import { background: #28a745; }
         #import-file { display: none; }
         .button-row { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+        .loading-overlay { font-size: 14px; color: #666; text-align: center; padding: 20px; }
     </style>
 </head>
 <body>
@@ -45,10 +46,12 @@
 
         <div class="stats-box">
             <div class="stats-label">שיעורים להשלמה</div>
-            <div class="stats-number" id="incomplete-count">0</div>
+            <div class="stats-number" id="incomplete-count">...</div>
         </div>
 
-        <div id="lessons-container"></div>
+        <div id="lessons-container">
+            <div class="loading-overlay">מתחבר לענן... ☁️</div>
+        </div>
 
         <div class="info-box">
             <p><strong>עם המורה:</strong> עמית כהן</p>
@@ -64,8 +67,24 @@
         <input type="file" id="import-file" accept=".json">
     </div>
 
-    <script>
-        const STORAGE_KEY = 'drums_v1';
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        // הערכים מהצילום מסך שלך:
+        const firebaseConfig = {
+            apiKey: "AIzaSyBmRiJM-PgKjQ5324Cf8bbRo57br4mtfFo",
+            authDomain: "drums-lessons.firebaseapp.com",
+            projectId: "drums-lessons",
+            storageBucket: "drums-lessons.firebasestorage.app",
+            messagingSenderId: "563052060558",
+            appId: "1:563052060558:web:ef7ba9a0b4541a513dcedf"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const docRef = doc(db, "drums_app", "amir_lessons");
+
         let allLessons = [];
 
         function generateLessons() {
@@ -73,7 +92,6 @@
             let date = new Date(2026, 8, 4);
             const endDate = new Date(2027, 6, 31);
             let week = 1;
-
             while (date <= endDate) {
                 lessons.push({
                     id: week,
@@ -87,130 +105,98 @@
             return lessons;
         }
 
-        function save() {
+        async function saveToCloud() {
             try {
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(allLessons));
+                await setDoc(docRef, { lessons: allLessons });
+                console.log('✓ נשמר בענן');
             } catch (e) {
-                console.error('Error saving:', e);
+                console.error('שגיאה בשמירה:', e);
             }
         }
 
-        function load() {
+        async function loadFromCloud() {
             try {
-                const stored = localStorage.getItem(STORAGE_KEY);
-                if (stored) {
-                    return JSON.parse(stored);
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists()) {
+                    allLessons = docSnap.data().lessons;
+                } else {
+                    allLessons = generateLessons();
+                    await saveToCloud();
                 }
+                render();
             } catch (e) {
-                console.error('Error loading:', e);
+                console.error('שגיאה בטעינה:', e);
+                document.getElementById('lessons-container').innerHTML = 'שגיאה בחיבור לענן. וודא שהפעלת את Firestore ב-Console.';
             }
-            return generateLessons();
         }
 
-        function markComplete(id) {
+        window.markComplete = async (id) => {
             const lesson = allLessons.find(l => l.id === id);
             if (lesson) {
                 lesson.status = 'done';
-                save();
                 render();
+                await saveToCloud();
             }
-        }
+        };
 
-        function markMissed(id) {
+        window.markMissed = async (id) => {
             const lesson = allLessons.find(l => l.id === id);
             if (lesson) {
                 lesson.status = 'missed';
-                save();
                 render();
+                await saveToCloud();
             }
-        }
+        };
 
-        function reset(id) {
+        window.reset = async (id) => {
             const lesson = allLessons.find(l => l.id === id);
             if (lesson) {
                 lesson.status = 'pending';
-                save();
                 render();
+                await saveToCloud();
             }
-        }
+        };
 
         function render() {
             const container = document.getElementById('lessons-container');
             container.innerHTML = '';
-
             const incomplete = allLessons.filter(l => l.status === 'missed').length;
             document.getElementById('incomplete-count').textContent = incomplete;
 
             allLessons.forEach(lesson => {
                 const date = new Date(lesson.date);
                 const dateStr = date.toLocaleDateString('he-IL', { month: 'short', day: 'numeric' });
+                let statusText = 'ממתינה', statusClass = 'status-pending';
 
-                let statusText = 'ממתינה';
-                let statusClass = 'status-pending';
-
-                if (lesson.status === 'done') {
-                    statusText = '✓ הושלם';
-                    statusClass = 'status-ok';
-                } else if (lesson.status === 'missed') {
-                    statusText = 'לא התקיים';
-                    statusClass = 'status-missed';
-                }
+                if (lesson.status === 'done') { statusText = '✓ הושלם'; statusClass = 'status-ok'; }
+                else if (lesson.status === 'missed') { statusText = 'לא התקיים'; statusClass = 'status-missed'; }
 
                 const card = document.createElement('div');
                 card.className = 'lesson-card';
+                card.innerHTML = `
+                    <div class="lesson-info">
+                        <h3>שבוע ${lesson.week}</h3>
+                        <p>${dateStr}</p>
+                    </div>
+                    <div class="lesson-actions">
+                        <div class="lesson-status ${statusClass}">${statusText}</div>
+                        <div class="button-row" id="buttons-${lesson.id}"></div>
+                    </div>
+                `;
+                container.appendChild(card);
 
-                const info = document.createElement('div');
-                const title = document.createElement('h3');
-                title.textContent = `שבוע ${lesson.week}`;
-                const dateEl = document.createElement('p');
-                dateEl.textContent = dateStr;
-                info.appendChild(title);
-                info.appendChild(dateEl);
-
-                const actions = document.createElement('div');
-                actions.className = 'lesson-actions';
-
-                const status = document.createElement('div');
-                status.className = `lesson-status ${statusClass}`;
-                status.textContent = statusText;
-                actions.appendChild(status);
-
-                const buttons = document.createElement('div');
-                buttons.className = 'button-row';
-
+                const btnRow = document.getElementById(`buttons-${lesson.id}`);
                 if (lesson.status === 'pending') {
-                    const yesBtn = document.createElement('button');
-                    yesBtn.className = 'btn-yes';
-                    yesBtn.textContent = '✓ כן';
-                    yesBtn.onclick = () => markComplete(lesson.id);
-
-                    const noBtn = document.createElement('button');
-                    noBtn.className = 'btn-no';
-                    noBtn.textContent = '✗ לא';
-                    noBtn.onclick = () => markMissed(lesson.id);
-
-                    buttons.appendChild(yesBtn);
-                    buttons.appendChild(noBtn);
+                    btnRow.innerHTML = `
+                        <button class="btn-yes" onclick="markComplete(${lesson.id})">✓ כן</button>
+                        <button class="btn-no" onclick="markMissed(${lesson.id})">✗ לא</button>
+                    `;
                 } else {
-                    const resetBtn = document.createElement('button');
-                    resetBtn.className = 'btn-reset';
-                    resetBtn.textContent = '↻ אפס';
-                    resetBtn.onclick = () => reset(lesson.id);
-                    buttons.appendChild(resetBtn);
-
+                    btnRow.innerHTML = `<button class="btn-reset" onclick="reset(${lesson.id})">↻ אפס</button>`;
                     if (lesson.status === 'missed') {
-                        const completeBtn = document.createElement('button');
-                        completeBtn.className = 'btn-complete';
-                        completeBtn.textContent = '✓ הושלם';
-                        completeBtn.onclick = () => markComplete(lesson.id);
-                        buttons.appendChild(completeBtn);
+                        btnRow.innerHTML += `<button class="btn-complete" onclick="markComplete(${lesson.id})">✓ הושלם</button>`;
                     }
                 }
-
-                actions.appendChild(buttons);
-                card.appendChild(info);
-                card.appendChild(actions);
-                container.appendChild(card);
             });
         }
 
@@ -218,34 +204,22 @@
             const blob = new Blob([JSON.stringify(allLessons, null, 2)], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
-            a.href = url;
-            a.download = `drums_${new Date().toISOString().split('T')[0]}.json`;
-            a.click();
-            URL.revokeObjectURL(url);
+            a.href = url; a.download = `drums_backup.json`; a.click();
         };
 
-        document.getElementById('import-btn').onclick = () => {
-            document.getElementById('import-file').click();
-        };
-
+        document.getElementById('import-btn').onclick = () => document.getElementById('import-file').click();
         document.getElementById('import-file').onchange = (e) => {
             const file = e.target.files[0];
-            if (!file) return;
             const reader = new FileReader();
-            reader.onload = (evt) => {
-                try {
-                    allLessons = JSON.parse(evt.target.result);
-                    save();
-                    render();
-                } catch (err) {
-                    alert('Error loading data');
-                }
+            reader.onload = async (evt) => {
+                allLessons = JSON.parse(evt.target.result);
+                render();
+                await saveToCloud();
             };
             reader.readAsText(file);
         };
 
-        allLessons = load();
-        render();
+        loadFromCloud();
     </script>
 </body>
 </html>
